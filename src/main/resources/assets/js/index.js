@@ -7,8 +7,8 @@ $(document).ready(function () {
   var markers = [];
   var polyline = null;
   var trafficLines = [];
-  var showPois = true; // default status for navigation
-  var map = L.map('map').setView([48.75969691865349, 9.181823730468752], 10);
+  var tab = 0; // default status for navigation
+  var map = L.map('map').setView([50.266667, 10.966667], 10);
   var greenIcon = new L.Icon({
     iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
@@ -37,8 +37,8 @@ $(document).ready(function () {
 
   xy = function(lat, lng, dist) {
     $.ajax({
-      url: '/api/route/points?lat=' + (!!lat ? lat : '48.72819563976143') +
-      '&lon=' + (!!lng ? lng : '9.124341895803811') + '&dist=' + (!!dist ? dist : 80),
+      url: '/api/route/points?lat=' + (!!lat ? lat : '50.266667') +
+      '&lon=' + (!!lng ? lng : '10.966667') + '&dist=' + (!!dist ? dist : 80),
       type: 'GET'
     }).done(function (data) {
       console.log(data.points);
@@ -57,46 +57,65 @@ $(document).ready(function () {
   }).addTo(map);
 
   $('.tabs button').on('click', function () {
+    let values = ["pois", "routing", "centroidsearch"]
+
     var buttonValue = $(this).val();
-    var otherValue = (buttonValue == 'pois') ? 'routing' : 'pois';
+
+    for (let idx in values) {
+      if ($('.tabs button[value="' + values[idx] + '"]').hasClass('active')) {
+        $('.tabs button[value="' + values[idx] + '"]').removeClass('active');
+        $('#' + values[idx]).hide();
+      }
+    }
 
     $('.tabs button[value="' + buttonValue + '"]').addClass('active');
-    $('.tabs button[value="' + otherValue + '"]').removeClass('active');
     $('#' + buttonValue).show();
-    $('#' + otherValue).hide();
 
-    showPois = buttonValue == 'pois';
+    tab = values.indexOf(buttonValue);
+
+    if (tab === 2) {
+      $('#ext_vehicle_select').show();
+    }
+    else {
+      $('#ext_vehicle_select').hide();
+    }
   });
 
   // register click and change handler
   map.on('click', function (e) {
     console.log('point: ', e.latlng);
-    if ((showPois && points.length >= 1) || (!showPois && points.length >= 2)) {
+    if (((tab === 0) && points.length >= 1) || (!(tab === 0) && points.length >= 2)) {
       resetMap();
     }
 
     addPointToMap(e.latlng, {icon: greenIcon});
 
-    if (points.length > 1) {
-      sendRequest(points[0], points[1]);
+    if ((points.length > 1) && (tab === 1)) {
+      sendRouteRequest(points[0], points[1]);
+    }
+    else if ((points.length > 1) && (tab === 2)) {
+      sendCentroidRequest(points[0], points[1]);
     }
   });
 
-  $('#vehicle, #mode').on('change', function () {
-    if (showPois) {
+  $('#vehicle, #other_vehicle, #mode').on('change', function () {
+    if (tab === 0) {
       return;
     }
 
     removePolyline();
 
-    if (points.length > 1) {
-      sendRequest(points[0], points[1]);
+    if ((points.length > 1) && (tab === 1)) {
+      sendRouteRequest(points[0], points[1]);
+    }
+    else if ((points.length > 1) && (tab === 2)) {
+      sendCentroidRequest(points[0], points[1]);
     }
   });
 
   $('button[name="search"]').on('click', function () {
     $('#error').hide();
-    if (!showPois) {
+    if (!(tab === 0)) {
       return;
     }
 
@@ -112,7 +131,15 @@ $(document).ready(function () {
     removePolyline();
 
     if (points.length > 1) {
-      sendRequest(points[0], points[1]);
+      sendRouteRequest(points[0], points[1]);
+    }
+  });
+
+  $('button[name="centroid_search"]').on('click', function() {
+    removePolyline();
+
+    if (points.length > 1) {
+      sendCentroidRequest(points[0], points[1]);
     }
   });
 
@@ -121,6 +148,13 @@ $(document).ready(function () {
     $('#error').hide();
     $('#route_from').val('');
     $('#route_to').val('');
+  });
+
+  $('button[name="centroid_clear"]').on('click', function () {
+    resetMap();
+    $('#error').hide();
+    $('#vehicle1').val('');
+    $('#vehicle2').val('');
   });
 
   $('#poiTable').on('click', 'table tbody tr', function (e) {
@@ -191,14 +225,14 @@ $(document).ready(function () {
     removePointsExceptFirst();
     $('#poiTable').empty().hide();
     addPointToMap(endPoint);
-    sendRequest(startPoint, endPoint);
+    sendRouteRequest(startPoint, endPoint);
   }
 
-  function sendRequest(startPoint, endPoint) {
+  function sendRouteRequest(startPoint, endPoint) {
     $('#error').hide();
     $('#route_from').val(pointToString(startPoint));
     $('#route_to').val(pointToString(endPoint));
-    var url = getRequestUrl(startPoint, endPoint);
+    var url = getRouteRequestUrl(startPoint, endPoint);
     console.log('Sending request to: ', url);
     $.ajax({
       url: url,
@@ -219,7 +253,36 @@ $(document).ready(function () {
     });
   }
 
-  function getRequestUrl(startPoint, endPoint) {
+  function sendCentroidRequest(posVehicle1, posVehicle2) {
+    $('#error').hide();
+
+    $('#vehicle1').val(pointToString(posVehicle1));
+    $('#vehicle2').val(pointToString(posVehicle2));
+
+    var url = getRouteRequestUrl(posVehicle1, posVehicle2);
+
+    console.log('Sending request to: ', url);
+    $.ajax({
+      url: url,
+      type: 'GET'
+    }).done(function (success) {
+      polyline = L.polyline(success.points, {color: 'blue'}).addTo(map);
+      map.fitBounds(polyline.getBounds());
+
+      $('#estimatedDistanceFrom1').val(success.distance);
+      $('#estimatedDistanceFrom2').val(Math.round((success.distance / 1000) * 100) / 100);
+      var seconds = success.timeInSeconds;
+      var date = new Date(null);
+      date.setSeconds(seconds);
+      $('#estimatedDurationFrom1').val(date.toISOString().substr(11, 8));
+      $('#estimatedDurationFrom2').val(date.toISOString().substr(11, 8));
+    }).fail(function (error) {
+      $('#error').html('Something went wrong. Error message: ' + error.responseText).show();
+      console.error('Error occurred while retrieving route between two points.', error);
+    });
+  }
+
+  function getRouteRequestUrl(startPoint, endPoint) {
     var start = getPointData(startPoint);
     var end = getPointData(endPoint);
     var params = '?lat1=' + start.lat + '&lon1=' + (start.lng || start.lon) + '&lat2=' + end.lat + '&lon2=' + (end.lng || end.lon);

@@ -23,13 +23,17 @@ html {
 }
 
 #navigation {
-  width: 20%;
+  width: 30%;
   float: left;
 }
 
-#routing {
+#routing, #centroidsearch {
   display: none;
   margin-bottom: 50px;
+}
+
+#ext_vehicle_select {
+  display: none;
 }
 
 #mapContainer {
@@ -37,7 +41,7 @@ html {
 }
 
 #map {
-  height: 500px;
+  height: 800px;
 }
 
 #footer {
@@ -57,7 +61,7 @@ button {
   font-weight: 700;
   text-transform: uppercase;
   padding: 10px;
-  width: 49%;
+  width: 32%;
   cursor: pointer;
 }
 
@@ -74,7 +78,7 @@ form > button, form > button:hover {
   border: none;
 }
 
-button[name="route_clear"] {
+button[name="route_clear"], button[name="centroid_clear"] {
   float: right;
   background: #3498DB !important;
   /*opacity: 0.5;*/
@@ -126,6 +130,6 @@ button[name="route_clear"] {
   cursor: pointer;
 }
 
-.navPart {
+.navPart, #options {
   padding: 10px;
 }
